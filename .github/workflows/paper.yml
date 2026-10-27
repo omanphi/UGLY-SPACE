@@ -1,0 +1,42 @@
+name: Check and build satire paper
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  paper:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Verify the toy model and generated files
+        run: make check
+      - name: Install the pinned Tectonic compiler
+        env:
+          TECTONIC_VERSION: '0.17.0'
+          TECTONIC_SHA256: '1a715688baf591e650c8aeb160ae934e181685eecbb38b317de30b269ac5d606'
+        run: |
+          curl --fail --location --retry 3 --output "$RUNNER_TEMP/tectonic.tar.gz" \
+            "https://github.com/tectonic-typesetting/tectonic/releases/download/tectonic%40${TECTONIC_VERSION}/tectonic-${TECTONIC_VERSION}-x86_64-unknown-linux-gnu.tar.gz"
+          echo "${TECTONIC_SHA256}  $RUNNER_TEMP/tectonic.tar.gz" | sha256sum --check
+          mkdir -p "$RUNNER_TEMP/ugly-space-tools"
+          tar -xzf "$RUNNER_TEMP/tectonic.tar.gz" -C "$RUNNER_TEMP/ugly-space-tools" tectonic
+          echo "$RUNNER_TEMP/ugly-space-tools" >> "$GITHUB_PATH"
+      - name: Build PDF and check LaTeX diagnostics
+        run: make paper
+      - name: Upload the paper and numerical example
+        uses: actions/upload-artifact@v4
+        with:
+          name: ugly-space-paper
+          path: |
+            build/main.pdf
+            experiments/results.csv
+          if-no-files-found: error
